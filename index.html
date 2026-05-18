@@ -60,17 +60,6 @@
           <p class="eyebrow">Usuário atual</p>
           <h2 id="currentUserName">—</h2>
           <p id="currentUserDetails" class="muted-text">—</p>
-
-          <div class="role-switch">
-            <label>
-              Perfil ativo
-              <select id="roleSelect">
-                <option value="ALUNO">Aluno</option>
-                <option value="PROFESSOR">Professor</option>
-                <option value="ADMIN">Administrador</option>
-              </select>
-            </label>
-          </div>
         </article>
 
         <article class="card">
@@ -92,22 +81,22 @@
           <form id="occurrenceForm" class="form-grid">
             <label>
               Nome do aluno
-              <input id="studentName" type="text" placeholder="Ex.: João da Silva" />
+              <input id="studentName" type="text" required placeholder="Ex.: João da Silva" />
             </label>
 
             <label>
               Matrícula
-              <input id="studentId" type="text" placeholder="Ex.: 202400123" />
+              <input id="studentId" type="text" required placeholder="Ex.: 202400123" />
             </label>
 
             <label>
               CPF
-              <input id="studentCpf" type="text" placeholder="Ex.: 000.000.000-00" />
+              <input id="studentCpf" type="text" required placeholder="Ex.: 000.000.000-00" />
             </label>
 
             <label>
               E-mail pessoal
-              <input id="studentEmail" type="email" placeholder="aluno@email.com" />
+              <input id="studentEmail" type="email" required placeholder="aluno@email.com" />
             </label>
 
             <label>
@@ -138,7 +127,7 @@
 
             <label class="span-2">
               Descrição da ocorrência
-              <textarea id="description" rows="5" placeholder="Descreva o ocorrido..."></textarea>
+              <textarea id="description" rows="5" required placeholder="Descreva o ocorrido..."></textarea>
             </label>
 
             <label class="span-2">

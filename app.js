@@ -4,16 +4,14 @@ const USERS = [
     name: "Ana Souza",
     email: "aluno@faculdade.local",
     password: "123456",
-    role: "ALUNO",
-    studentId: "202400001"
+    role: "ALUNO"
   },
   {
     id: 2,
     name: "Prof. Carlos Lima",
     email: "professor@faculdade.local",
     password: "123456",
-    role: "PROFESSOR",
-    classes: ["5A", "5B"]
+    role: "PROFESSOR"
   },
   {
     id: 3,
@@ -24,13 +22,13 @@ const USERS = [
   }
 ];
 
-const FAKE_API_TOKEN = "TOKEN_SECRETO_DEMO_ABC123_PUBLICO_NO_FRONTEND";
-
 const STORAGE_KEYS = {
   session: "ocorrencias_sessao",
   occurrences: "ocorrencias_registros",
   audit: "ocorrencias_logs"
 };
+
+const SESSION_TIMEOUT = 15 * 60 * 1000;
 
 const INITIAL_OCCURRENCES = [
   {
@@ -42,41 +40,11 @@ const INITIAL_OCCURRENCES = [
     studentPhone: "(47) 99999-1010",
     category: "Nota",
     priority: "Média",
-    description: "Solicitação de revisão de nota da avaliação bimestral.",
-    internalNote: "Verificar com a coordenação antes de responder.",
+    description: "Solicitação de revisão de nota.",
+    internalNote: "Verificar coordenação.",
     status: "Aberta",
     createdBy: "professor@faculdade.local",
     createdAt: "2026-05-05T18:40:00.000Z"
-  },
-  {
-    id: "OC-1002",
-    studentName: "Rafael Martins",
-    studentId: "202200771",
-    studentCpf: "987.654.321-00",
-    studentEmail: "rafael.martins@email.local",
-    studentPhone: "(47) 98888-2020",
-    category: "Frequência",
-    priority: "Alta",
-    description: "Aluno contesta lançamento de falta em aula prática.",
-    internalNote: "Conferir chamada manual.",
-    status: "Em análise",
-    createdBy: "professor@faculdade.local",
-    createdAt: "2026-05-05T18:50:00.000Z"
-  },
-  {
-    id: "OC-1003",
-    studentName: "Beatriz Costa",
-    studentId: "202100441",
-    studentCpf: "111.222.333-44",
-    studentEmail: "beatriz.costa@email.local",
-    studentPhone: "(47) 97777-3030",
-    category: "Solicitação administrativa",
-    priority: "Crítica",
-    description: "Solicitação envolvendo documentação acadêmica e prazo de matrícula.",
-    internalNote: "Priorizar atendimento.",
-    status: "Aberta",
-    createdBy: "admin@faculdade.local",
-    createdAt: "2026-05-05T19:00:00.000Z"
   }
 ];
 
@@ -89,7 +57,6 @@ const exportBtn = document.querySelector("#exportBtn");
 const clearLogsBtn = document.querySelector("#clearLogsBtn");
 const resetBtn = document.querySelector("#resetBtn");
 const searchInput = document.querySelector("#search");
-const roleSelect = document.querySelector("#roleSelect");
 
 const sessionBadge = document.querySelector("#sessionBadge");
 const currentUserName = document.querySelector("#currentUserName");
@@ -100,25 +67,65 @@ const totalOccurrences = document.querySelector("#totalOccurrences");
 const criticalOccurrences = document.querySelector("#criticalOccurrences");
 const lastUpdate = document.querySelector("#lastUpdate");
 
+function sanitize(value) {
+  return String(value)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
+function maskCpf(cpf) {
+  return cpf.replace(/\d(?=\d{2})/g, "*");
+}
+
+function isAdmin() {
+  const session = getSession();
+  return session && session.role === "ADMIN";
+}
+
+function isProfessor() {
+  const session = getSession();
+  return session && session.role === "PROFESSOR";
+}
+
+function canDelete() {
+  return isAdmin();
+}
+
+function canExport() {
+  return isAdmin();
+}
+
+function canViewLogs() {
+  return isAdmin();
+}
+
 function boot() {
   if (!localStorage.getItem(STORAGE_KEYS.occurrences)) {
-    localStorage.setItem(STORAGE_KEYS.occurrences, JSON.stringify(INITIAL_OCCURRENCES));
+    localStorage.setItem(
+      STORAGE_KEYS.occurrences,
+      JSON.stringify(INITIAL_OCCURRENCES)
+    );
   }
 
   if (!localStorage.getItem(STORAGE_KEYS.audit)) {
-    localStorage.setItem(STORAGE_KEYS.audit, JSON.stringify([
-      {
-        when: new Date().toISOString(),
-        user: "sistema",
-        action: "BASE_INICIAL_CRIADA",
-        detail: "Dados fictícios carregados no localStorage."
-      }
-    ]));
+    localStorage.setItem(STORAGE_KEYS.audit, JSON.stringify([]));
   }
 
   const session = getSession();
 
   if (session) {
+    const now = Date.now();
+
+    if (now - session.lastActivity > SESSION_TIMEOUT) {
+      logout();
+      alert("Sessão encerrada por inatividade.");
+      return;
+    }
+
+    session.lastActivity = now;
+    saveSession(session);
     showApp(session);
   } else {
     showLogin();
@@ -126,11 +133,16 @@ function boot() {
 }
 
 function getOccurrences() {
-  return JSON.parse(localStorage.getItem(STORAGE_KEYS.occurrences) || "[]");
+  return JSON.parse(
+    localStorage.getItem(STORAGE_KEYS.occurrences) || "[]"
+  );
 }
 
 function saveOccurrences(occurrences) {
-  localStorage.setItem(STORAGE_KEYS.occurrences, JSON.stringify(occurrences));
+  localStorage.setItem(
+    STORAGE_KEYS.occurrences,
+    JSON.stringify(occurrences)
+  );
 }
 
 function getAuditLogs() {
@@ -146,7 +158,12 @@ function getSession() {
 }
 
 function saveSession(user) {
-  localStorage.setItem(STORAGE_KEYS.session, JSON.stringify(user));
+  user.lastActivity = Date.now();
+
+  localStorage.setItem(
+    STORAGE_KEYS.session,
+    JSON.stringify(user)
+  );
 }
 
 function writeLog(action, detail) {
@@ -168,6 +185,7 @@ function showLogin() {
   loginView.classList.remove("hidden");
   appView.classList.add("hidden");
   logoutBtn.classList.add("hidden");
+
   sessionBadge.textContent = "Sessão não iniciada";
   sessionBadge.classList.add("muted");
 }
@@ -181,14 +199,18 @@ function showApp(user) {
   sessionBadge.classList.remove("muted");
 
   currentUserName.textContent = user.name;
-  currentUserDetails.textContent = `${user.email} | Perfil: ${user.role}`;
-  roleSelect.value = user.role;
+  currentUserDetails.textContent =
+    `${user.email} | Perfil: ${user.role}`;
 
   render();
 }
 
 function login(email, password) {
-  const user = USERS.find((item) => item.email === email && item.password === password);
+  const user = USERS.find(
+    (item) =>
+      item.email === email &&
+      item.password === password
+  );
 
   if (!user) {
     alert("Usuário ou senha inválidos.");
@@ -197,28 +219,47 @@ function login(email, password) {
   }
 
   saveSession(user);
-  writeLog("LOGIN_OK", `Usuário ${user.email} entrou no sistema.`);
+
+  writeLog(
+    "LOGIN_OK",
+    `Usuário ${user.email} entrou no sistema.`
+  );
+
   showApp(user);
 }
 
 function logout() {
   const session = getSession();
-  writeLog("LOGOUT", session ? `${session.email} saiu do sistema.` : "Sessão encerrada.");
+
+  writeLog(
+    "LOGOUT",
+    session
+      ? `${session.email} saiu do sistema.`
+      : "Sessão encerrada."
+  );
+
   localStorage.removeItem(STORAGE_KEYS.session);
+
   showLogin();
 }
 
-function changeRole(newRole) {
-  const session = getSession();
-
-  if (!session) {
-    return;
+function validateOccurrence(data) {
+  if (
+    !data.studentName ||
+    !data.studentId ||
+    !data.studentCpf ||
+    !data.description
+  ) {
+    alert("Preencha os campos obrigatórios.");
+    return false;
   }
 
-  session.role = newRole;
-  saveSession(session);
-  writeLog("PERFIL_ALTERADO", `Perfil ativo alterado manualmente para ${newRole}.`);
-  showApp(session);
+  if (!data.privacyAck) {
+    alert("Confirme autorização dos dados.");
+    return false;
+  }
+
+  return true;
 }
 
 function createOccurrence(event) {
@@ -226,49 +267,81 @@ function createOccurrence(event) {
 
   const session = getSession();
 
+  if (!session) {
+    alert("Sessão inválida.");
+    return;
+  }
+
   const occurrence = {
     id: `OC-${Math.floor(Math.random() * 9000) + 1000}`,
-    studentName: document.querySelector("#studentName").value,
-    studentId: document.querySelector("#studentId").value,
-    studentCpf: document.querySelector("#studentCpf").value,
-    studentEmail: document.querySelector("#studentEmail").value,
-    studentPhone: document.querySelector("#studentPhone").value,
-    category: document.querySelector("#category").value,
-    priority: document.querySelector("#priority").value,
-    description: document.querySelector("#description").value,
-    internalNote: document.querySelector("#internalNote").value,
+    studentName: sanitize(document.querySelector("#studentName").value),
+    studentId: sanitize(document.querySelector("#studentId").value),
+    studentCpf: sanitize(document.querySelector("#studentCpf").value),
+    studentEmail: sanitize(document.querySelector("#studentEmail").value),
+    studentPhone: sanitize(document.querySelector("#studentPhone").value),
+    category: sanitize(document.querySelector("#category").value),
+    priority: sanitize(document.querySelector("#priority").value),
+    description: sanitize(document.querySelector("#description").value),
+    internalNote: sanitize(document.querySelector("#internalNote").value),
     privacyAck: document.querySelector("#privacyAck").checked,
     status: "Aberta",
-    createdBy: session ? session.email : "desconhecido",
+    createdBy: session.email,
     createdAt: new Date().toISOString()
   };
 
+  if (!validateOccurrence(occurrence)) {
+    return;
+  }
+
   const occurrences = getOccurrences();
+
   occurrences.unshift(occurrence);
+
   saveOccurrences(occurrences);
 
   writeLog(
     "OCORRENCIA_CRIADA",
-    `Criada ocorrência ${occurrence.id} para ${occurrence.studentName} / ${occurrence.studentCpf}. Descrição: ${occurrence.description}`
+    `Ocorrência ${occurrence.id} criada.`
   );
 
   occurrenceForm.reset();
+
   render();
 }
 
 function deleteOccurrence(id) {
+  if (!canDelete()) {
+    alert("Acesso negado.");
+    return;
+  }
+
   const occurrences = getOccurrences();
-  const occurrence = occurrences.find((item) => item.id === id);
-  const updated = occurrences.filter((item) => item.id !== id);
+
+  const updated = occurrences.filter(
+    (item) => item.id !== id
+  );
 
   saveOccurrences(updated);
-  writeLog("OCORRENCIA_EXCLUIDA", `Ocorrência ${id} excluída. Registro: ${JSON.stringify(occurrence)}`);
+
+  writeLog(
+    "OCORRENCIA_EXCLUIDA",
+    `Ocorrência ${id} excluída.`
+  );
+
   render();
 }
 
 function changeStatus(id, status) {
+  if (!isProfessor() && !isAdmin()) {
+    alert("Acesso negado.");
+    return;
+  }
+
   const occurrences = getOccurrences();
-  const occurrence = occurrences.find((item) => item.id === id);
+
+  const occurrence = occurrences.find(
+    (item) => item.id === id
+  );
 
   if (!occurrence) {
     return;
@@ -278,103 +351,227 @@ function changeStatus(id, status) {
   occurrence.updatedAt = new Date().toISOString();
 
   saveOccurrences(occurrences);
-  writeLog("STATUS_ALTERADO", `Ocorrência ${id} alterada para ${status}.`);
+
+  writeLog(
+    "STATUS_ALTERADO",
+    `Ocorrência ${id} alterada para ${status}.`
+  );
+
   render();
 }
 
 function exportEverything() {
+  if (!canExport()) {
+    alert("Somente administradores podem exportar.");
+    return;
+  }
+
   const payload = {
     exportedAt: new Date().toISOString(),
-    exportedBy: getSession(),
-    token: FAKE_API_TOKEN,
-    users: USERS,
     occurrences: getOccurrences(),
-    audit: getAuditLogs(),
-    localStorageCopy: { ...localStorage }
+    audit: getAuditLogs()
   };
 
-  const blob = new Blob([JSON.stringify(payload, null, 2)], {
-    type: "application/json"
-  });
+  const blob = new Blob(
+    [JSON.stringify(payload, null, 2)],
+    {
+      type: "application/json"
+    }
+  );
 
   const url = URL.createObjectURL(blob);
+
   const anchor = document.createElement("a");
 
   anchor.href = url;
-  anchor.download = "backup-completo-ocorrencias.json";
+  anchor.download = "backup-ocorrencias.json";
   anchor.click();
 
   URL.revokeObjectURL(url);
 
-  writeLog("EXPORTACAO_TOTAL", "Usuário exportou todos os dados do sistema.");
+  writeLog(
+    "EXPORTACAO_TOTAL",
+    "Dados exportados."
+  );
 }
 
 function clearLogs() {
+  if (!isAdmin()) {
+    alert("Acesso negado.");
+    return;
+  }
+
   saveAuditLogs([]);
+
   render();
 }
 
 function resetData() {
-  localStorage.setItem(STORAGE_KEYS.occurrences, JSON.stringify(INITIAL_OCCURRENCES));
-  localStorage.setItem(STORAGE_KEYS.audit, JSON.stringify([]));
-  localStorage.removeItem(STORAGE_KEYS.session);
-  boot();
+  if (!isAdmin()) {
+    alert("Acesso negado.");
+    return;
+  }
+
+  localStorage.setItem(
+    STORAGE_KEYS.occurrences,
+    JSON.stringify(INITIAL_OCCURRENCES)
+  );
+
+  localStorage.setItem(
+    STORAGE_KEYS.audit,
+    JSON.stringify([])
+  );
+
+  writeLog("RESET", "Sistema restaurado.");
+
+  render();
 }
 
 function render() {
   const term = searchInput.value.toLowerCase();
+
   const occurrences = getOccurrences();
 
   const filtered = occurrences.filter((item) => {
-    const content = JSON.stringify(item).toLowerCase();
-    return content.includes(term);
+    return JSON.stringify(item)
+      .toLowerCase()
+      .includes(term);
   });
 
-  totalOccurrences.textContent = occurrences.length;
-  criticalOccurrences.textContent = occurrences.filter((item) => item.priority === "Crítica").length;
-  lastUpdate.textContent = `Atualizado em ${new Date().toLocaleTimeString("pt-BR")}`;
+  totalOccurrences.textContent =
+    occurrences.length;
 
-  occurrencesTable.innerHTML = filtered.map((item) => `
-    <tr>
-      <td>
-        <strong>${item.studentName}</strong><br />
-        <span class="muted-text">${item.studentId}</span>
-      </td>
-      <td>${item.studentCpf}</td>
-      <td>
-        ${item.studentEmail}<br />
-        ${item.studentPhone}
-      </td>
-      <td>${item.category}</td>
-      <td><span class="priority ${item.priority}">${item.priority}</span></td>
-      <td>${item.status}</td>
-      <td>
-        <strong>Descrição:</strong> ${item.description}<br />
-        <strong>Obs. interna:</strong> ${item.internalNote}
-      </td>
-      <td>
-        <div class="row-actions">
-          <button class="btn secondary" onclick="changeStatus('${item.id}', 'Em análise')">Em análise</button>
-          <button class="btn secondary" onclick="changeStatus('${item.id}', 'Resolvida')">Resolver</button>
-          <button class="btn danger" onclick="deleteOccurrence('${item.id}')">Excluir</button>
-        </div>
-      </td>
-    </tr>
-  `).join("");
+  criticalOccurrences.textContent =
+    occurrences.filter(
+      (item) => item.priority === "Crítica"
+    ).length;
+
+  lastUpdate.textContent =
+    `Atualizado em ${new Date().toLocaleTimeString("pt-BR")}`;
+
+  occurrencesTable.innerHTML = filtered
+    .map((item) => `
+      <tr>
+        <td>
+          <strong>${sanitize(item.studentName)}</strong><br />
+          <span class="muted-text">${sanitize(item.studentId)}</span>
+        </td>
+
+        <td>${maskCpf(item.studentCpf)}</td>
+
+        <td>
+          ${sanitize(item.studentEmail)}<br />
+          ${sanitize(item.studentPhone)}
+        </td>
+
+        <td>${sanitize(item.category)}</td>
+
+        <td>
+          <span class="priority ${sanitize(item.priority)}">
+            ${sanitize(item.priority)}
+          </span>
+        </td>
+
+        <td>${sanitize(item.status)}</td>
+
+        <td>
+          <strong>Descrição:</strong>
+          ${sanitize(item.description)}
+          <br />
+
+          ${
+            isAdmin()
+              ? `
+            <strong>Obs. interna:</strong>
+            ${sanitize(item.internalNote)}
+          `
+              : ""
+          }
+        </td>
+
+        <td>
+          <div class="row-actions">
+            ${
+              isProfessor() || isAdmin()
+                ? `
+              <button
+                class="btn secondary"
+                onclick="changeStatus('${item.id}', 'Em análise')"
+              >
+                Em análise
+              </button>
+
+              <button
+                class="btn secondary"
+                onclick="changeStatus('${item.id}', 'Resolvida')"
+              >
+                Resolver
+              </button>
+            `
+                : ""
+            }
+
+            ${
+              canDelete()
+                ? `
+              <button
+                class="btn danger"
+                onclick="deleteOccurrence('${item.id}')"
+              >
+                Excluir
+              </button>
+            `
+                : ""
+            }
+          </div>
+        </td>
+      </tr>
+    `)
+    .join("");
+
+  if (!canViewLogs()) {
+    auditLog.innerHTML = `
+      <div class="notice">
+        Apenas administradores podem visualizar logs.
+      </div>
+    `;
+
+    return;
+  }
 
   const logs = getAuditLogs();
 
   if (logs.length === 0) {
-    auditLog.innerHTML = `<div class="notice">Nenhum log registrado.</div>`;
-  } else {
-    auditLog.innerHTML = logs.map((log) => `
-      <div class="log-item">
-        <strong>${log.when}</strong><br />
-        usuário=${log.user || "—"} | perfil=${log.role || "—"} | ação=${log.action}<br />
-        detalhe=${log.detail}
+    auditLog.innerHTML = `
+      <div class="notice">
+        Nenhum log registrado.
       </div>
-    `).join("");
+    `;
+
+    return;
   }
+
+  auditLog.innerHTML = logs
+    .map(
+      (log) => `
+      <div class="log-item">
+        <strong>${sanitize(log.when)}</strong><br />
+
+        usuário=${sanitize(log.user || "—")}
+        |
+
+        perfil=${sanitize(log.role || "—")}
+        |
+
+        ação=${sanitize(log.action)}
+
+        <br />
+
+        detalhe=${sanitize(log.detail)}
+      </div>
+    `
+    )
+    .join("");
 }
 
 loginForm.addEventListener("submit", (event) => {
@@ -386,15 +583,35 @@ loginForm.addEventListener("submit", (event) => {
   );
 });
 
-occurrenceForm.addEventListener("submit", createOccurrence);
+occurrenceForm.addEventListener(
+  "submit",
+  createOccurrence
+);
+
 logoutBtn.addEventListener("click", logout);
-exportBtn.addEventListener("click", exportEverything);
-clearLogsBtn.addEventListener("click", clearLogs);
-resetBtn.addEventListener("click", resetData);
-searchInput.addEventListener("input", render);
-roleSelect.addEventListener("change", (event) => changeRole(event.target.value));
+
+exportBtn.addEventListener(
+  "click",
+  exportEverything
+);
+
+clearLogsBtn.addEventListener(
+  "click",
+  clearLogs
+);
+
+resetBtn.addEventListener(
+  "click",
+  resetData
+);
+
+searchInput.addEventListener(
+  "input",
+  render
+);
 
 window.deleteOccurrence = deleteOccurrence;
 window.changeStatus = changeStatus;
 
 boot();
+
